@@ -1,0 +1,12 @@
+{
+  "name": "vk2tg-repost",
+  "version": "1.0.0",
+  "description": "Simple NodeJS application for reposting VK communities posts to Telegram chat/bot conversation",
+  "main": "./src/main.js",
+  "author": "lixxteq (Zhakov Roman) <https://github.com/lixxteq>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
