@@ -6,7 +6,20 @@
   "author": "lixxteq (Zhakov Roman) <https://github.com/lixxteq>",
   "license": "MIT",
   "private": false,
+  "scripts": {
+    "start": "node dist/main.js",
+    "build": "yarn esbuild --bundle src/main.ts --outdir=dist --platform=node",
+    "cpenv": "cp .env dist"
+  },
   "dependencies": {
+    "lokijs": "^1.5.12",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/lokijs": "^1.5.10",
+    "@types/node": "^20.5.8",
+    "dotenv": "^16.3.1",
+    "esbuild": "^0.19.2",
+    "typescript": "^5.2.2"
   }
 }

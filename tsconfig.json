@@ -1,0 +1,16 @@
+{   
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "outDir": "./dist",
+    "verbatimModuleSyntax": true,
+    "preserveValueImports": false,
+    "importsNotUsedAsValues": "remove",
+    "baseUrl": "./src"
+  },   
+  "include": [
+    "/**/*.ts"
+  ]
+} 
