@@ -1,4 +1,4 @@
-import Loki from 'lokijs'
+import Loki from 'lokijs';
 
 const getStorage = () => {
     const db = new Loki('storage.db');
