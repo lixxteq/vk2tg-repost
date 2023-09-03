@@ -7,9 +7,9 @@
   "license": "MIT",
   "private": false,
   "scripts": {
+    "dev": "yarn build --watch=forever & yarn nodemon dist/main.js",
     "start": "node dist/main.js",
-    "build": "yarn esbuild --bundle src/main.ts --outdir=dist --platform=node",
-    "cpenv": "cp .env dist"
+    "build": "yarn esbuild --bundle src/main.ts --outdir=dist --platform=node"
   },
   "dependencies": {
     "lokijs": "^1.5.12",
@@ -20,6 +20,7 @@
     "@types/node": "^20.5.8",
     "dotenv": "^16.3.1",
     "esbuild": "^0.19.2",
+    "nodemon": "^3.0.1",
     "typescript": "^5.2.2"
   }
 }

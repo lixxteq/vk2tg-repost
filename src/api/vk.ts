@@ -2,14 +2,13 @@ import fetch from "node-fetch";
 import type { GetNewPostsResponse, Group, ResolveGroupsResponse, WallHistory } from "types/types";
 
 export default class VkAPI {
-    request_uri: string;
+    request_uri: string = 'https://api.vk.com/method/';
     api_token: string;
     api_version: string;
     wall_history: WallHistory;
 
     constructor(api_token: string) {
         this.api_token = api_token;
-        this.request_uri = 'https://api.vk.com/method/';
         this.api_version = process.env.VK_API_VERSION || '5.131';
         this.wall_history = {init_time: Date.now() / 1000, history: {}};
     }

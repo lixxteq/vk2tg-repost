@@ -1,11 +1,15 @@
-import getStorage from "storage/db";
-import TelegramBotFactory from "./api/telegram";
-require('dotenv').config();
+import 'dotenv/config'
+import TelegramBotFactory from "api/telegram";
+import VkAPI from "api/vk";
+import Storage from "storage/db";
 
-const bot = new TelegramBotFactory(process.env.TELEGRAM_TOKEN, process.env.VK_TOKEN, getStorage());
+const storage = new Storage(process.env.LOKI_FILENAME);
+const api = new VkAPI(process.env.VK_TOKEN);
+const bot = new TelegramBotFactory(process.env.TELEGRAM_TOKEN, api, storage.get());
 
-const main = () => {
-    bot.init();
-}
+process.on('SIGINT', async () => {
+    await storage.save();
+    process.exit(0);
+});
 
-main();
+(function main() {bot.init()})();

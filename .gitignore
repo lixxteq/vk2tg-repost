@@ -1,0 +1,9 @@
+# dev env
+.env
+node_modules
+# output
+build
+bin
+dist
+# misc
+*.db
