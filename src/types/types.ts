@@ -13,6 +13,12 @@ export interface UpdatesResponse {
     result: Update[]
 }
 
+export interface SendMessageResponse {
+    ok: boolean,
+    result: Message,
+    [key: string]: any
+}
+
 export interface ResolveGroupsResponse {
     response?: Group[],
     error?: {
@@ -45,6 +51,27 @@ export interface Message {
     [key: string]: any
 }
 
+export interface MessageOptions {
+    reply_markup?: ReplyKeyboardMarkup | ReplyKeyboardRemove,
+    [key: string]: any
+}
+
+export interface ReplyKeyboardMarkup {
+    keyboard: KeyboardButton[][],
+    is_persistent?: boolean,
+    one_time_keyboard?: boolean,
+    input_field_placeholder?: string,
+    resize_keyboard?: boolean
+}
+
+export interface KeyboardButton {
+    text: string
+}
+
+export interface ReplyKeyboardRemove {
+    remove_keyboard: true
+}
+
 export interface User {
     id: number,
     is_bot: boolean,
@@ -71,7 +98,8 @@ export interface WallPost {
         link?: string
     },
     post_type: string,
-    attachments: WallPostAttachment[],
+    from_id?: number,
+    attachments?: WallPostAttachment[],
     [key: string]: any
 }
 

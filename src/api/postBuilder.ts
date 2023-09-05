@@ -1,13 +1,15 @@
-import type { WallPost } from "types/types";
+import type { TelegramPost, WallPost } from "types/types";
 
 export default class PostBuilder {
-    raw_posts: WallPost[];
+    raw_post: WallPost;
 
-    constructor(raw_data: WallPost[]) {
-        this.raw_posts = raw_data;
+    constructor(raw_data: WallPost) {
+        this.raw_post = raw_data;
     }
 
-    build() {
-        
+    build(): TelegramPost {
+        const telegramPost = new FormData();
+        // telegramPost.append('')
+        return 
     }
 }
