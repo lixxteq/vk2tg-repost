@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import type { GetNewPostsResponse, Group, ResolveGroupsResponse, WallHistory } from "types/types";
+import type { GetNewPostsResponse, Group, ResolveGroupsResponse, WallHistory } from "types/vk.types";
 
 export default class VkAPI {
     request_uri: string = 'https://api.vk.com/method/';

@@ -1,6 +1,6 @@
 import Loki from 'lokijs';
 import { setTimeout } from 'timers/promises';
-import type { UserPref } from 'types/types';
+import type { UserPref } from 'types/telegram.types';
 
 export default class Storage {
     db: Loki;

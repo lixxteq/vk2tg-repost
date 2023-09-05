@@ -1,8 +1,10 @@
 import fetch from "node-fetch";
-import type { Context, Message, Update, UpdatesResponse, UserPref, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove } from "../types/types";
+import type { Context, IncomingMessage, Update, UpdatesResponse, UserPref, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove, OutgoingMessage } from "types/telegram.types";
 import VkAPI from "./vk";
-import PostBuilder from "./postBuilder";
+import PostBuilder from "./post-builder";
 import Symbols from "units/symbols";
+import Texts from "units/texts";
+import Commands from "units/commands";
 
 export default class TelegramBotFactory {
     request_uri: string;
@@ -56,22 +58,22 @@ export default class TelegramBotFactory {
             const upd_ctx = this.context_map[upd.message.chat.id];
             if (upd_ctx && upd_ctx.mode && !isCommand(upd.message.text)) {
                 switch (upd_ctx.mode) {
-                    case '/add':
+                    case Commands.ADD:
                         try {
                             this.subscribe(upd.message);
                             this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
-                            this.sendMessage(upd.message.chat.id, 'Группы добавлены в отслеживаемые');
+                            this.sendMessage({chat_id: upd.message.chat.id, text: Texts.ADD_SUCCESS});
                         } catch (error) {
-                            this.sendMessage(upd.message.chat.id, `Ошибка: ${error}`);
+                            this.sendMessage({chat_id: upd.message.chat.id, text: `Ошибка: ${error}`});
                         }
                         break;
-                    case '/remove':
+                    case Commands.REMOVE:
                         try {
                             this.unsubscribe(upd.message);
                             this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
-                            this.sendMessage(upd.message.chat.id, 'Группы удалены из отслеживаемых');
+                            this.sendMessage({chat_id: upd.message.chat.id, text: Texts.REMOVE_SUCCESS});
                         } catch (error) {
-                            this.sendMessage(upd.message.chat.id, `Ошибка: ${error}`);
+                            this.sendMessage({chat_id: upd.message.chat.id, text: `Ошибка: ${error}`});
                         }
                         break;
                 }
@@ -82,43 +84,44 @@ export default class TelegramBotFactory {
     }
     // TODO: /help
     async handleMessageCommand(upd: Update) {
-        console.log(upd.message.text);
+        console.debug(upd.message.text);
 
         switch (upd.message.text) {
             case '/start':
-                this.sendMessage(upd.message.chat.id, 'Приветствую! Используйте команды в меню бота, чтобы добавлять группы в список отслеживаемых и получать новые посты из этих групп в этот диалог');
+                this.sendMessage({chat_id: upd.message.chat.id, text: Texts.START});
                 break;
             case '/add':
-                this.context_map[upd.message.chat.id] = { mode: '/add', last_message: upd.message };
-                this.sendMessage(upd.message.chat.id, 'Введите ссылку на группу или группы (через запятую), посты которых надо отслеживать (например: https://vk.com/group_name):', {reply_markup: attachCancelButton()});
+                this.context_map[upd.message.chat.id] = { mode: 'ADD', last_message: upd.message };
+                this.sendMessage({chat_id: upd.message.chat.id, text: Texts.ADD, reply_markup: attachCancelButton});
                 break;
             case '/remove':
-                this.context_map[upd.message.chat.id] = { mode: '/remove', last_message: upd.message };
+                this.context_map[upd.message.chat.id] = { mode: 'REMOVE', last_message: upd.message };
                 this.sendSubscriptionsList(upd.message.chat.id);
-                this.sendMessage(upd.message.chat.id, 'Введите номер группы или групп (через запятую), которые нужно перестать отслеживать', {reply_markup: attachCancelButton()});
+                this.sendMessage({chat_id: upd.message.chat.id, text: Texts.REMOVE, reply_markup: attachCancelButton});
                 break;
             case '/list':
                 this.sendSubscriptionsList(upd.message.chat.id);
                 break;
+            // ?: convert to InlineKeyboard
             case Symbols.CANCEL:
                 this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
-                const cb = await this.sendMessage(upd.message.chat.id, '123', {reply_markup: removeKeyboard()});
-                // TODO: remove user message with Symbols.CANCEL
+                const cb = await this.sendMessage({chat_id: upd.message.chat.id, text: ' ', reply_markup: removeKeyboard})
+                // TODO: remove user message with Symbols.CANCEL + exception handler
                 if (cb) this.deleteMessage(upd.message.chat.id, (await cb.json() as SendMessageResponse).result.message_id);
                 break;
             default:
-                this.sendMessage(upd.message.chat.id, 'Неизвестная команда (список команд доступен в меню бота)');
+                this.sendMessage({chat_id: upd.message.chat.id, text: Texts.UNKNOWN});
                 break;
         }
     }
 
-    async subscribe(message: Message) {
+    async subscribe(message: IncomingMessage) {
         // TODO: validation + error throwing
         const group_screen_names = message.text.split(',').map(link => new URL(link).pathname.split('/').pop());
         // screen name resolver
     }
 
-    async unsubscribe(message: Message) {
+    async unsubscribe(message: IncomingMessage) {
 
     }
 
@@ -126,10 +129,9 @@ export default class TelegramBotFactory {
 
     }
 
-    async sendMessage(chat_id: number, message: string, options?: MessageOptions) {
-        let request = `${this.request_uri}sendMessage?chat_id=${chat_id}&text=${message}`;
-        // TODO: test stringify behaviour
-        if (options) Object.entries(options).forEach((entry) => request += `&${entry[0]}=${JSON.stringify(entry[1])}`);
+    async sendMessage(message: OutgoingMessage) {
+        // TODO: inspect serialize util behaviour
+        let request = `${this.request_uri}sendMessage?${serializeToQuery(message)}`;
         return fetch(request).catch(err => console.error(err));
     }
 
@@ -143,7 +145,7 @@ export default class TelegramBotFactory {
             headers: {
                 'Content-Type': 'multipart/form-data'
             },
-            body: data
+            // body: data
         })
     }
 
@@ -172,7 +174,7 @@ export default class TelegramBotFactory {
             }
         } catch (error) {
             for (const consumer of consumer_ids) {
-                this.sendMessage(consumer, error);
+                this.sendMessage({chat_id: consumer, text: error});
             }
         }
         setTimeout(() => { this.flowPostLoop(idx++) }, this.post_timeout);
@@ -197,17 +199,13 @@ const isCommand = (message: string) => {
     return message[0] === '/' || /^\p{Extended_Pictographic}$/u.test(message);
 }
 
-const attachCancelButton = (): ReplyKeyboardMarkup => {
-    return {
-        keyboard: [[{ text: Symbols.CANCEL }]],
-        is_persistent: true,
-        one_time_keyboard: true,
-        resize_keyboard: true
-    }
+const attachCancelButton: ReplyKeyboardMarkup = {
+    keyboard: [[{ text: Symbols.CANCEL }]],
+    is_persistent: true,
+    one_time_keyboard: true,
+    resize_keyboard: true
 }
 
-const removeKeyboard = (): ReplyKeyboardRemove => {
-    return {
-        remove_keyboard: true
-    }
+const removeKeyboard: ReplyKeyboardRemove = {
+    remove_keyboard: true
 }
