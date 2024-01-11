@@ -76,28 +76,28 @@ export interface Chat {
     [key: string]: any
 }
 
-export interface TelegramPostBase {
+interface ITelegramPost {
     chat_id: number,
     parse_mode?: 'MarkdownV2' | 'HTML',
 }
 
-export interface TelegramMessagePost extends TelegramPostBase {
+export interface TelegramMessagePost extends ITelegramPost {
 
 }
 
-export interface TelegramPhotoPost extends TelegramPostBase {
+export interface TelegramPhotoPost extends ITelegramPost {
 
 }
 
-export interface TelegramAudioPost extends TelegramPostBase {
+export interface TelegramAudioPost extends ITelegramPost {
 
 }
 
-export interface TelegramVideoPost extends TelegramPostBase {
+export interface TelegramVideoPost extends ITelegramPost {
 
 }
 
-export interface TelegramMediaGroupPost extends TelegramPostBase {
+export interface TelegramMediaGroupPost extends ITelegramPost {
 
 }
 

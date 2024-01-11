@@ -5,6 +5,7 @@ import PostBuilder from "./post-builder";
 import Symbols from "units/symbols";
 import Texts from "units/texts";
 import Commands from "units/commands";
+import { serializeToQuery } from "utils/utils";
 
 export default class TelegramBotFactory {
     request_uri: string;
@@ -26,7 +27,7 @@ export default class TelegramBotFactory {
     }
 
     /**
-     * Initialize bot, start Telegram API Long-Polling and launch VK to Telegram reposting process
+     * Initialize bot, start Telegram API long-polling and launch reposting loop
      * @async
      */
     async init() {
@@ -43,6 +44,8 @@ export default class TelegramBotFactory {
                 this.handleMessage(parsed);
                 this.update_offset = parsed.length ? parsed.pop()['update_id'] + 1 : this.update_offset;
                 console.log('Last update: ', this.update_offset);
+                console.log('Context:', this.context_map[parsed[0]?.message.chat.id]);
+                
                 break;
             case 502:
                 break;
@@ -58,7 +61,7 @@ export default class TelegramBotFactory {
             const upd_ctx = this.context_map[upd.message.chat.id];
             if (upd_ctx && upd_ctx.mode && !isCommand(upd.message.text)) {
                 switch (upd_ctx.mode) {
-                    case Commands.ADD:
+                    case 'ADD':
                         try {
                             this.subscribe(upd.message);
                             this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
@@ -67,7 +70,7 @@ export default class TelegramBotFactory {
                             this.sendMessage({chat_id: upd.message.chat.id, text: `Ошибка: ${error}`});
                         }
                         break;
-                    case Commands.REMOVE:
+                    case 'REMOVE':
                         try {
                             this.unsubscribe(upd.message);
                             this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
@@ -87,25 +90,25 @@ export default class TelegramBotFactory {
         console.debug(upd.message.text);
 
         switch (upd.message.text) {
-            case '/start':
+            case Commands.START:
                 this.sendMessage({chat_id: upd.message.chat.id, text: Texts.START});
                 break;
-            case '/add':
+            case Commands.ADD:
                 this.context_map[upd.message.chat.id] = { mode: 'ADD', last_message: upd.message };
                 this.sendMessage({chat_id: upd.message.chat.id, text: Texts.ADD, reply_markup: attachCancelButton});
                 break;
-            case '/remove':
+            case Commands.REMOVE:
                 this.context_map[upd.message.chat.id] = { mode: 'REMOVE', last_message: upd.message };
                 this.sendSubscriptionsList(upd.message.chat.id);
                 this.sendMessage({chat_id: upd.message.chat.id, text: Texts.REMOVE, reply_markup: attachCancelButton});
                 break;
-            case '/list':
+            case Commands.LIST:
                 this.sendSubscriptionsList(upd.message.chat.id);
                 break;
             // ?: convert to InlineKeyboard
             case Symbols.CANCEL:
                 this.context_map[upd.message.chat.id] = { mode: null, last_message: upd.message };
-                const cb = await this.sendMessage({chat_id: upd.message.chat.id, text: ' ', reply_markup: removeKeyboard})
+                const cb = await this.sendMessage({chat_id: upd.message.chat.id, text: 'Cancelled', reply_markup: removeKeyboard})
                 // TODO: remove user message with Symbols.CANCEL + exception handler
                 if (cb) this.deleteMessage(upd.message.chat.id, (await cb.json() as SendMessageResponse).result.message_id);
                 break;
@@ -116,6 +119,7 @@ export default class TelegramBotFactory {
     }
 
     async subscribe(message: IncomingMessage) {
+        console.debug('invoked')
         // TODO: validation + error throwing
         const group_screen_names = message.text.split(',').map(link => new URL(link).pathname.split('/').pop());
         // screen name resolver
@@ -169,7 +173,6 @@ export default class TelegramBotFactory {
             if (raw_posts.length) {
                 for (const raw_post of raw_posts) {
                     const post = new PostBuilder(raw_post).build();
-
                 }
             }
         } catch (error) {
@@ -195,8 +198,8 @@ export default class TelegramBotFactory {
 
 
 const isCommand = (message: string) => {
-    // message is considered as command only if it starts from slash or if it's Unicode emoji
-    return message[0] === '/' || /^\p{Extended_Pictographic}$/u.test(message);
+    // message is considered as command only if it is in Commands list or if it's Unicode emoji
+    return Object.values(Commands).includes(message) || /^\p{Extended_Pictographic}$/u.test(message);
 }
 
 const attachCancelButton: ReplyKeyboardMarkup = {

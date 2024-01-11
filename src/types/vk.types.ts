@@ -29,12 +29,6 @@ export interface WallPost {
     [key: string]: any
 }
 
-export interface WallPostAttachment {
-    type: AttachmentType,
-    link?: LinkAttachment,
-    [key: string]: any
-}
-
 export interface Group {
     id: number,
     screen_name: string,
@@ -48,13 +42,58 @@ export interface WallHistory {
     history: Record<number, number>
 }
 
-export interface LinkAttachment {
+export type WallPostAttachment = LinkAttachment | PhotoAttachment | VideoAttachment | AudioAttachment | DocAttachment
+
+interface IAttachment {
+    type: AttachmentType
+}
+
+export interface LinkAttachment extends IAttachment {
     url: string,
-    description: string,
+    description?: string,
+    title?: string,
+    caption?: string,
     [key: string]: any
 }
 
-export interface PhotoAttachment {
+export interface PhotoAttachment extends IAttachment {
+    id: number,
+    text?: string,
+    sizes: PhotoAttachmentSize[],
+    width?: number,
+    height?: number,
+    [key: string]: any
+}
+
+export interface PhotoAttachmentSize {
+    type: PhotoAttachmentType,
+    url: string,
+    width: number,
+    height: number,
+    [key: string]: any
+}
+
+export interface VideoAttachment extends IAttachment {
+    id: number,
+    title?: string,
+    description?: string,
+    duration: number,
+    player: string,
+    [key: string]: any
+}
+
+export interface AudioAttachment extends IAttachment {
+    id: number,
+    artist: string,
+    title: string,
+    duration: number,
+    url: string,
+    [key: string]: any
+}
+
+export interface DocAttachment extends IAttachment {
     
 }
+
 type AttachmentType = "photo" | "photos_list" | "audio" | "audio_playlist" | "video" | "doc" | "link" | "note" | "app" | "poll" | "page" | "album" | "event" | "article" | "group";
+type PhotoAttachmentType = "s" | "m" | "x" | "o" | "p" | "q" | "r" | "y" | "z" | "w"

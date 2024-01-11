@@ -4,7 +4,7 @@ import VkAPI from "api/vk";
 import Storage from "storage/db";
 
 const storage = new Storage(process.env.LOKI_FILENAME);
-const api = new VkAPI(process.env.VK_TOKEN);
+const api = new VkAPI();
 const bot = new TelegramBotFactory(process.env.TELEGRAM_TOKEN, api, storage.get());
 
 process.on('SIGINT', async () => {
