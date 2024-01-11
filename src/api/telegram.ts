@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import type { Context, IncomingMessage, Update, UpdatesResponse, UserPref, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove, OutgoingMessage } from "types/telegram.types";
+import type { Context, IncomingMessage, Update, UpdatesResponse, UserPref, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove, OutgoingMessage, TelegramPostRequest } from "types/telegram.types";
 import VkAPI from "./vk";
 import PostBuilder from "./post-builder";
 import Symbols from "units/symbols";
@@ -23,7 +23,7 @@ export default class TelegramBotFactory {
         this.vk_api = vk_api;
         this.storage = storage;
         this.request_mode = request_mode || 'flow';
-        this.post_timeout = this.calculatePostTimeout(request_mode);
+        this.post_timeout = this.calculatePostTimeout();
     }
 
     /**
@@ -143,14 +143,20 @@ export default class TelegramBotFactory {
         return fetch(`${this.request_uri}deleteMessage?chat_id=${chat_id}&message_id=${message_id}`);
     }
 
-    async post(method: string, data: TelegramPost) {
-        return fetch(this.request_uri, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            },
-            // body: data
-        })
+    async post(req: TelegramPostRequest, consumers: number[]) {
+        var req_stack = []
+        for (let consumer of consumers) {
+            req.data.chat_id = consumer
+            req_stack.push(
+                fetch(`${this.request_uri}${req.method}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    },
+                    body: JSON.stringify(req.data)
+                })
+            )
+        }
     }
 
     async initPostLoop() {
@@ -172,7 +178,8 @@ export default class TelegramBotFactory {
             const raw_posts = await this.vk_api.getNewPosts(group_id);
             if (raw_posts.length) {
                 for (const raw_post of raw_posts) {
-                    const post = new PostBuilder(raw_post).build();
+                    const post_request = new PostBuilder(raw_post).build();
+                    this.post(post_request, consumer_ids)
                 }
             }
         } catch (error) {
@@ -191,8 +198,8 @@ export default class TelegramBotFactory {
      * Calculates timeout between vk-api request based on request mode, api limitations and amount of subscribed groups
      * @returns timeout in milliseconds
      */
-    calculatePostTimeout(request_mode) {
-        return request_mode === 'burst' ? 86400 / (5000 / this.storage.count()) * 1000 : 86400 / 5000 * 1000;
+    calculatePostTimeout() {
+        return this.request_mode === 'burst' ? 86400 / (5000 / this.storage.count()) * 1000 : 86400 / 5000 * 1000;
     }
 }
 

@@ -1,43 +1,74 @@
 import type { AudioAttachment, LinkAttachment, PhotoAttachment, VideoAttachment, WallPost, WallPostAttachment } from "types/vk.types";
-import type { TelegramAttachment, TelegramPost } from "types/telegram.types";
-import { SupportedAttachmentType, TelegramTypeMapper } from "units/types";
+import type { InputMedia, InputMediaPhoto, TelegramPost, InputMediaType, InputMediaVideo, InputMediaGroup, InputMediaAudio, InputMediaDocument, TelegramPostRequest, TelegramPhotoPost, TelegramVideoPost, TelegramDocumentPost, TelegramAudioPost, TelegramMessagePost, TelegramMediaGroupPost } from "types/telegram.types";
+import { SupportedAttachmentType, TelegramTypeMapper } from "units/mappings";
 
 export default class PostBuilder {
     raw_post: WallPost;
     method: string = 'sendMessage';
+    media_group: InputMediaGroup[]
+    attachment: TelegramPost
 
     constructor(raw_data: WallPost) {
         this.raw_post = raw_data;
     }
 
-    build(): TelegramPost {
-        // const post = new FormData();
-        var post: TelegramPost
-        post.
+    public build(): TelegramPostRequest {
+        var val = this.form_attachments();
 
-        return 
+        var post_request: TelegramPostRequest = {
+            method: this.method,
+            data: this.attachment ? this.attachment : this.media_group ? {media: this.media_group} : {text: this.raw_post.text}
+        }
+
+        return post_request
     }
 
-    formAttachments(): TelegramAttachment[] {
-        const attachments: TelegramAttachment[] = [];
+    private form_attachments(): number {
         const raw_attachments = this.raw_post.attachments.filter(el => SupportedAttachmentType.includes(el.type));
         switch (raw_attachments.length) {
             case 0:
-                return attachments;
+                return 0;
             case 1:
                 this.method = TelegramTypeMapper[raw_attachments[0].type].method;
-                attachments.push({type: TelegramTypeMapper[raw_attachments[0].type].type, media: AttachmentURLExtractor[raw_attachments[0].type](raw_attachments[0])})
-                break;
+                this.attachment = this.attachment_from_attachment(raw_attachments[0]);
+                return raw_attachments.length;
             default:
+                // Documents and audio files can be only grouped in an album with messages of the same type
+                var singles = raw_attachments.filter(el => el.type === 'doc' || el.type === 'audio').length
+                if (singles != 0 && singles != raw_attachments.length) {
+                    // handle non-grouping attachments
+                    return;
+                }
                 this.method = TelegramTypeMapper.mediaGroup;
-                break;
+                this.media_group = this.form_media_group(raw_attachments);
+                this.media_group[0].caption = this.raw_post.text;
+                return raw_attachments.length;
         }
-        return attachments;
+    }
+
+    private form_media_group(attachments: WallPostAttachment[]): InputMediaGroup[] {
+        return [...attachments.map(attachment => this.media_from_attachment(attachment))];
+    }
+
+    private media_from_attachment(attachment: WallPostAttachment): InputMediaGroup {
+        var _media: InputMedia = {
+            type: TelegramTypeMapper[attachment.type].type,
+            media: AttachmentMediaURLExtractor[attachment.type](attachment)
+        }
+        return MediaConstructor[_media.type](_media)
+    }
+
+    private attachment_from_attachment(attachment: WallPostAttachment): TelegramPost {
+        var _media: InputMedia = {
+            type: TelegramTypeMapper[attachment.type].type,
+            media: AttachmentMediaURLExtractor[attachment.type](attachment)
+        }
+        return {...AttachmentConstructor[_media.type](_media), caption: this.raw_post.text}
     }
 }
 
 // TODO: extend function to return complete attachment types instead of url
-const AttachmentURLExtractor = {
+const AttachmentMediaURLExtractor = {
     // TODO: photo sizes testing
     // https://dev.vk.com/ru/reference/objects/photo-sizes
     // TODO: compare photo size in bytes and api limitations, fallback to sending through form-data
@@ -56,4 +87,18 @@ const AttachmentURLExtractor = {
     'audio': (attachment: AudioAttachment) => {
         return attachment.url;
     }
+}
+
+const MediaConstructor = {
+    'photo': (media: InputMedia): InputMediaPhoto => ({...media, type: 'photo', show_caption_above_media: true}),
+    'video': (media: InputMedia): InputMediaVideo => ({...media, type: 'video', show_caption_above_media: true}),
+    'audio': (media: InputMedia): InputMediaAudio => ({...media, type: 'audio'}),
+    'document': (media: InputMedia): InputMediaDocument => ({...media, type: 'document'})
+}
+
+const AttachmentConstructor = {
+    'photo': (media: InputMedia): TelegramPhotoPost => ({photo: media.media, show_caption_above_media: true}),
+    'video': (media: InputMedia): TelegramVideoPost => ({video: media.media, show_caption_above_media: true, supports_streaming: true}),
+    'audio': (media: InputMedia): TelegramAudioPost => ({audio: media.media}),
+    'document': (media: InputMedia): TelegramDocumentPost => ({document: media.media})
 }
