@@ -126,10 +126,6 @@ export interface TelegramPostRequest {
     data: TelegramPost
 }
 
-export interface UserPref {
-    group_id: number,
-    consumer_ids: number[]
-}
 
 export type InputMediaType = 'photo' | 'audio' | 'video' | 'document' | 'animation'
 

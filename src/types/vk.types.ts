@@ -26,6 +26,7 @@ export interface WallPost {
     post_type: string,
     from_id?: number,
     attachments?: WallPostAttachment[],
+    is_pinned?: number,
     [key: string]: any
 }
 

@@ -1,28 +1,28 @@
 import fetch from "node-fetch";
-import type { Context, IncomingMessage, Update, UpdatesResponse, UserPref, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove, OutgoingMessage, TelegramPostRequest } from "types/telegram.types";
+import type { Context, IncomingMessage, Update, UpdatesResponse, TelegramPost, MessageOptions, SendMessageResponse, ReplyKeyboardMarkup, ReplyKeyboardRemove, OutgoingMessage, TelegramPostRequest } from "types/telegram.types";
 import VkAPI from "./vk";
 import PostBuilder from "./post-builder";
 import Symbols from "units/symbols";
 import Texts from "units/texts";
 import Commands from "units/commands";
 import { serializeToQuery } from "utils/utils";
-import type Storage from "storage/db";
-import type { RxCollection, RxDatabase, RxDocument } from "rxdb";
 import type { Subscription } from "rxjs";
+import logger from "utils/logger";
+import type { UserCollection, UserDatabase, UserDocument } from "storage/db";
 
 export default class TelegramBotFactory {
     request_uri: string;
     api_token: string;
     update_offset: number = 0;
-    storage: RxCollection<UserPref>
+    storage: UserCollection
     context_map: Record<number, Context> = {};
     post_timeout: number;
     vk_api: VkAPI;
     request_mode: 'burst' | 'flow'
     $sub: Subscription
-    $: RxDocument<UserPref, {}>[]
+    $: UserDocument[]
 
-    constructor(tg_api_token: string, vk_api: VkAPI, storage: RxDatabase, request_mode?: 'burst' | 'flow') {
+    constructor(tg_api_token: string, vk_api: VkAPI, storage: UserDatabase, request_mode?: 'burst' | 'flow') {
         this.api_token = tg_api_token;
         this.request_uri = `https://api.telegram.org/bot${tg_api_token}/`;
         this.vk_api = vk_api;
@@ -40,31 +40,32 @@ export default class TelegramBotFactory {
         this.$ = await this.storage.find({}).exec()
         this.poll();
         this.initPostLoop();
-        // console.log(process.env)
+        logger.info(`[telegram] started bot, RxDB entries: ${this.$?.length}`)
     }
 
     async poll() {
-        const res = await fetch(`${this.request_uri}getUpdates?offset=${this.update_offset}&timeout=30&allowed_updates=message`);
+        const res = await fetch(`${this.request_uri}getUpdates?offset=${this.update_offset}&timeout=60&allowed_updates=message`);
 
         switch (res.status) {
             case 200:
                 const parsed = ((await res.json()) as UpdatesResponse).result;
-                this.handleMessage(parsed);
-                this.update_offset = parsed.length ? parsed.pop()['update_id'] + 1 : this.update_offset;
-                console.log('Last update: ', this.update_offset);
-                console.log('Context:', this.context_map[parsed[0]?.message.chat.id]);
-                
+                if (parsed) {
+                    this.handleMessage(parsed);
+                    this.update_offset = parsed.length ? parsed.pop()['update_id'] + 1 : this.update_offset;
+                }
+                logger.info(`[telegram] long poll offset: ${this.update_offset}, context: ${this.context_map[parsed[0]?.message.chat.id]}`);
                 break;
             case 502:
                 break;
             default:
-                console.log('Polling error: ', res.status);
+                logger.info('[telegram] long poll error: ', res.status);
                 break;
         }
         setTimeout(() => this.poll(), 0);
     }
 
     async handleMessage(updates: Update[]) {
+        logger.info(`[telegram] received ${updates.length} updates: ${updates.map((upd) => [upd.message.chat.id, upd.message.text])}`)
         for (const upd of updates) {
             const upd_ctx = this.context_map[upd.message.chat.id];
             if (upd_ctx && upd_ctx.mode && !isCommand(upd.message.text)) {
@@ -95,8 +96,6 @@ export default class TelegramBotFactory {
     }
     // TODO: /help
     async handleMessageCommand(upd: Update) {
-        console.debug(upd.message.text);
-
         switch (upd.message.text) {
             case Commands.START:
                 this.sendMessage({chat_id: upd.message.chat.id, text: Texts.START});
@@ -139,7 +138,7 @@ export default class TelegramBotFactory {
             // this.storage.commit()
             // this.storage.updateWhere((data) => data.group_id === id, (obj) => obj.consumer_ids.push(message.chat.id))
         }
-        console.debug(`[tg]: subscribe ${message.chat.id} to ${ids.join(', ')}`)
+        logger.info(`[telegram]: subscribe ${message.chat.id} to ${ids.join(', ')}`)
     }
 
     async unsubscribe(message: IncomingMessage) {
@@ -153,7 +152,7 @@ export default class TelegramBotFactory {
     async sendMessage(message: OutgoingMessage) {
         // TODO: inspect serialize util behaviour
         let request = `${this.request_uri}sendMessage?${serializeToQuery(message)}`;
-        return fetch(request).catch(err => console.error(err));
+        return fetch(request).catch((err) => {logger.error(`[telegram] send_message error: ${err}`)});
     }
 
     async deleteMessage(chat_id: number, message_id: number) {
@@ -188,13 +187,13 @@ export default class TelegramBotFactory {
     }
 
     async flowPostLoop(idx: number) {
-        console.log('Loop call', idx)
-        console.log('Doc count', await this.storage.count({}).exec())
-        console.log('rxobservable count', this.$.length)
+        logger.info(`[telegram] loop call ${idx}, RxDB entries: ${await this.storage.count({}).exec()}, RxObservable count: ${this.$.length}`)
         if (await this.storage.count({}).exec() === 0) return setTimeout(() => { this.flowPostLoop(0) }, 60 * 1000);
         if (idx >= this.$.length) idx = 0;
-        console.log('active index', idx)
         const { group_id, consumer_ids } = this.$[idx]
+        // const data = this.$[idx]
+        logger.debug(`${group_id}, ${consumer_ids}`)
+        // logger.debug(data.consumer_ids)
         try {
             const raw_posts = await this.vk_api.getNewPosts(group_id);
             if (raw_posts.length) {
@@ -204,7 +203,7 @@ export default class TelegramBotFactory {
                 }
             }
         } catch (error) {
-            console.log('post error', error)
+            logger.error(`[telegram] loop post error ${[group_id, consumer_ids]}: ${error}`)
             for (const consumer of consumer_ids) {
                 this.sendMessage({chat_id: consumer, text: error});
             }

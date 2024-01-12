@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import type { GetNewPostsResponse, Group, ResolveGroupsResponse, WallHistory } from "types/vk.types";
+import logger from "utils/logger";
 
 class APIReference {
     request_uri: string = 'https://api.vk.com/method/';
@@ -45,7 +46,7 @@ export default class VkAPI {
     async resolveGroupIds(screen_names: string[]) {
         // const res = (await (await this.request('groups.getById', {group_ids: screen_names})).json()) as ResolveGroupsResponse;
         const res = await this.ref.groups.getById(screen_names);
-        console.log(res)
+        logger.debug(`[vk] resolve_group_ids response: ${res}`)
         if (res.error?.error_code === 100) throw new Error('Введенной группы не существует, проверьте правильность ввода и повторите попытку');
         if (res.error) throw new Error(`Ошибка запроса: ${res.error.error_code}`);
         if (res.response.length < screen_names.length) throw new Error(`Не существует групп: ${nonResolved(screen_names, res.response).join(', ')}, проверьте правильность ввода и повторите попытку`);
@@ -55,9 +56,13 @@ export default class VkAPI {
     async getNewPosts(group_id: number) {
         // const res = (await (await this.request('wall.get', {owner_id: group_id, count: 10})).json()) as GetNewPostsResponse;
         const res = await this.ref.wall.get(group_id, 10);
+        logger.debug(`[vk] unfiltered get_new_posts response: count=${res.response.count}`)
+        if (res.response.items[0].is_pinned === 1) res.response.items.shift()
         if (res.error && [15, 19].includes(res.error.error_code)) throw new Error(`Сообщество "${await this.getDomainById(group_id)}" закрыло доступ к своим записям. Уберите это сообщество из отслеживаемых`);
         if (res.error) throw new Error(`Ошибка запроса: ${res.error.error_code}`);
-        return res.response.items.slice(0, res.response.items.findIndex((post) => post.date < (this.wall_history.history[group_id] || this.wall_history.init_time)));
+        var filtered = res.response.items.slice(0, res.response.items.findIndex((post) => post.date < (this.wall_history.history[group_id] ?? this.wall_history.init_time)))
+        if (filtered) logger.debug(`[vk] filtered get_new_posts response: ${filtered}`)
+        return filtered;
     }
 }
 

@@ -1,15 +1,15 @@
-import { createRxDatabase, type RxDatabase } from 'rxdb';
+import { createRxDatabase, toTypedRxJsonSchema, type ExtractDocumentTypeFromTypedRxJsonSchema, type RxCollection, type RxDatabase, type RxDocument, type RxJsonSchema } from 'rxdb';
 import { getRxStorageMongoDB } from 'rxdb/plugins/storage-mongodb';
 
 class Storage {
-    db: RxDatabase
+    db: UserDatabase
 
     constructor(storage_filename?: string) {
 
     }
 
     public async init() {
-        this.db = await createRxDatabase({
+        this.db = await createRxDatabase<UserCollections>({
             name: 'storage',
             storage: getRxStorageMongoDB({
                 connection: `mongodb://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@localhost:27017`
@@ -24,7 +24,7 @@ class Storage {
     }
 }
 
-const UserSchema = {
+const NTUserSchema = {
     title: 'users',
     version: 0,
     primaryKey: 'group_id',
@@ -33,7 +33,7 @@ const UserSchema = {
         group_id: {
             type: 'number'
         },
-        consumer_id: {
+        consumer_ids: {
             type: 'array',
             uniqueItems: true,
             items: {
@@ -41,8 +41,15 @@ const UserSchema = {
             }
         }
     }
-};
+} as const;
 
+const TUserSchema = toTypedRxJsonSchema(NTUserSchema);
+export type UserDocType = ExtractDocumentTypeFromTypedRxJsonSchema<typeof TUserSchema>
+export const UserSchema: RxJsonSchema<UserDocType> = NTUserSchema
 
+export type UserDocument = RxDocument<UserDocType>
+export type UserCollection = RxCollection<UserDocType>
+export type UserCollections = { users: UserCollection }
+export type UserDatabase = RxDatabase<UserCollections>
 
 export default Storage;
