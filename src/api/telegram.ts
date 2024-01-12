@@ -6,24 +6,30 @@ import Symbols from "units/symbols";
 import Texts from "units/texts";
 import Commands from "units/commands";
 import { serializeToQuery } from "utils/utils";
+import type Storage from "storage/db";
+import type { RxCollection, RxDatabase, RxDocument } from "rxdb";
+import type { Subscription } from "rxjs";
 
 export default class TelegramBotFactory {
     request_uri: string;
     api_token: string;
     update_offset: number = 0;
-    storage: Collection<UserPref>;
+    storage: RxCollection<UserPref>
     context_map: Record<number, Context> = {};
     post_timeout: number;
     vk_api: VkAPI;
     request_mode: 'burst' | 'flow'
+    $sub: Subscription
+    $: RxDocument<UserPref, {}>[]
 
-    constructor(tg_api_token: string, vk_api: VkAPI, storage: Collection<UserPref>, request_mode?: 'burst' | 'flow') {
+    constructor(tg_api_token: string, vk_api: VkAPI, storage: RxDatabase, request_mode?: 'burst' | 'flow') {
         this.api_token = tg_api_token;
         this.request_uri = `https://api.telegram.org/bot${tg_api_token}/`;
         this.vk_api = vk_api;
-        this.storage = storage;
+        this.storage = storage.users
         this.request_mode = request_mode || 'flow';
-        this.post_timeout = this.calculatePostTimeout();
+        this.calculatePostTimeout().then((timeout) => this.post_timeout = timeout);
+        this.$sub = this.storage.find({}).$.subscribe((data) => this.$ = data)
     }
 
     /**
@@ -31,8 +37,10 @@ export default class TelegramBotFactory {
      * @async
      */
     async init() {
+        this.$ = await this.storage.find({}).exec()
         this.poll();
         this.initPostLoop();
+        // console.log(process.env)
     }
 
     async poll() {
@@ -99,11 +107,11 @@ export default class TelegramBotFactory {
                 break;
             case Commands.REMOVE:
                 this.context_map[upd.message.chat.id] = { mode: 'REMOVE', last_message: upd.message };
-                this.sendSubscriptionsList(upd.message.chat.id);
+                this.send_subscriptions_list(upd.message.chat.id);
                 this.sendMessage({chat_id: upd.message.chat.id, text: Texts.REMOVE, reply_markup: attachCancelButton});
                 break;
             case Commands.LIST:
-                this.sendSubscriptionsList(upd.message.chat.id);
+                this.send_subscriptions_list(upd.message.chat.id);
                 break;
             // ?: convert to InlineKeyboard
             case Symbols.CANCEL:
@@ -119,18 +127,27 @@ export default class TelegramBotFactory {
     }
 
     async subscribe(message: IncomingMessage) {
-        console.debug('invoked')
         // TODO: validation + error throwing
         const group_screen_names = message.text.split(',').map(link => new URL(link).pathname.split('/').pop());
+        var ids = await this.vk_api.resolveGroupIds(group_screen_names)
         // screen name resolver
+        for (let id of ids) {
+            var _doc = await this.storage.findOne({selector: {group_id: id}}).exec()
+            // this.storage.insert({group_id: id, consumer_id: message.chat.id})
+            if (_doc) _doc.consumer_ids.push(message.chat.id)
+            if (!_doc) _doc = await this.storage.insert({group_id: id, consumer_ids: [message.chat.id]})
+            // this.storage.commit()
+            // this.storage.updateWhere((data) => data.group_id === id, (obj) => obj.consumer_ids.push(message.chat.id))
+        }
+        console.debug(`[tg]: subscribe ${message.chat.id} to ${ids.join(', ')}`)
     }
 
     async unsubscribe(message: IncomingMessage) {
 
     }
 
-    async sendSubscriptionsList(chat_id: number) {
-
+    async send_subscriptions_list(chat_id: number) {
+        this.sendMessage({chat_id: chat_id, text: `${Texts.LIST} ${this.storage.find({selector: {consumer_ids: {$in: [chat_id]}}})}`})
     }
 
     async sendMessage(message: OutgoingMessage) {
@@ -150,9 +167,9 @@ export default class TelegramBotFactory {
             req_stack.push(
                 fetch(`${this.request_uri}${req.method}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'multipart/form-data'
-                    },
+                    // headers: {
+                    //     'Content-Type': 'multipart/form-data'
+                    // },
                     body: JSON.stringify(req.data)
                 })
             )
@@ -171,9 +188,13 @@ export default class TelegramBotFactory {
     }
 
     async flowPostLoop(idx: number) {
-        if (this.storage.count() === 0) return setTimeout(() => { this.flowPostLoop(0) }, 60 * 1000);
-        if (idx >= this.storage.count()) idx = 0;
-        const { group_id, consumer_ids } = this.storage.get(idx);
+        console.log('Loop call', idx)
+        console.log('Doc count', await this.storage.count({}).exec())
+        console.log('rxobservable count', this.$.length)
+        if (await this.storage.count({}).exec() === 0) return setTimeout(() => { this.flowPostLoop(0) }, 60 * 1000);
+        if (idx >= this.$.length) idx = 0;
+        console.log('active index', idx)
+        const { group_id, consumer_ids } = this.$[idx]
         try {
             const raw_posts = await this.vk_api.getNewPosts(group_id);
             if (raw_posts.length) {
@@ -183,11 +204,12 @@ export default class TelegramBotFactory {
                 }
             }
         } catch (error) {
+            console.log('post error', error)
             for (const consumer of consumer_ids) {
                 this.sendMessage({chat_id: consumer, text: error});
             }
         }
-        setTimeout(() => { this.flowPostLoop(idx++) }, this.post_timeout);
+        setTimeout(() => { this.flowPostLoop(++idx) }, this.post_timeout);
     }
 
     async burstPostLoop() {
@@ -198,8 +220,8 @@ export default class TelegramBotFactory {
      * Calculates timeout between vk-api request based on request mode, api limitations and amount of subscribed groups
      * @returns timeout in milliseconds
      */
-    calculatePostTimeout() {
-        return this.request_mode === 'burst' ? 86400 / (5000 / this.storage.count()) * 1000 : 86400 / 5000 * 1000;
+    async calculatePostTimeout() {
+        return this.request_mode === 'burst' ? 86400 / (5000 / await this.storage.count({}).exec()) * 1000 : 86400 / 5000 * 1000;
     }
 }
 

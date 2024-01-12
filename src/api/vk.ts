@@ -4,7 +4,7 @@ import type { GetNewPostsResponse, Group, ResolveGroupsResponse, WallHistory } f
 class APIReference {
     request_uri: string = 'https://api.vk.com/method/';
     api_version: string = process.env.VK_API_VERSION || '5.131';
-    api_token: string = process.env.VK_API_TOKEN;
+    api_token: string = process.env.VK_TOKEN;
 
     async request(method: string) {
         return await fetch(method, {
@@ -45,6 +45,7 @@ export default class VkAPI {
     async resolveGroupIds(screen_names: string[]) {
         // const res = (await (await this.request('groups.getById', {group_ids: screen_names})).json()) as ResolveGroupsResponse;
         const res = await this.ref.groups.getById(screen_names);
+        console.log(res)
         if (res.error?.error_code === 100) throw new Error('Введенной группы не существует, проверьте правильность ввода и повторите попытку');
         if (res.error) throw new Error(`Ошибка запроса: ${res.error.error_code}`);
         if (res.response.length < screen_names.length) throw new Error(`Не существует групп: ${nonResolved(screen_names, res.response).join(', ')}, проверьте правильность ввода и повторите попытку`);

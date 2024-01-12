@@ -1,27 +1,48 @@
-import Loki from 'lokijs';
-import { setTimeout } from 'timers/promises';
-import type { UserPref } from 'types/telegram.types';
+import { createRxDatabase, type RxDatabase } from 'rxdb';
+import { getRxStorageMongoDB } from 'rxdb/plugins/storage-mongodb';
 
-export default class Storage {
-    db: Loki;
+class Storage {
+    db: RxDatabase
 
     constructor(storage_filename?: string) {
-        this.db = new Loki(storage_filename || 'storage.db', {
-            autoload: true,
-            autosave: true,
-            autosaveInterval: 10000
+
+    }
+
+    public async init() {
+        this.db = await createRxDatabase({
+            name: 'storage',
+            storage: getRxStorageMongoDB({
+                connection: `mongodb://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@localhost:27017`
+            })
         })
-    }
 
-    get(): Collection<UserPref> {
-        return this.db.getCollection('users') || this.db.addCollection('users', {indices: ['group_id'], autoupdate: true});
-    }
-
-    async save() {
-        /*
-        Loki.saveDatabase method uses async fs.writeFile operation, while being synchronous itself
-        Promise-based timeout prevents Loki.saveDatabase being finished before actually writing database to file system
-        */
-        await setTimeout(1000, this.db.saveDatabase(err => console.log(err ? `Loki.saveDatabase error: ${err}` : 'Loki.saveDatabase success')));
+        await this.db.addCollections({
+            users: {
+                schema: UserSchema
+            }
+        });
     }
 }
+
+const UserSchema = {
+    title: 'users',
+    version: 0,
+    primaryKey: 'group_id',
+    type: 'object',
+    properties: {
+        group_id: {
+            type: 'number'
+        },
+        consumer_id: {
+            type: 'array',
+            uniqueItems: true,
+            items: {
+                type: 'number'
+            }
+        }
+    }
+};
+
+
+
+export default Storage;

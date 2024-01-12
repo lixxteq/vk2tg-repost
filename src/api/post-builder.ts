@@ -61,7 +61,7 @@ export default class PostBuilder {
     private attachment_from_attachment(attachment: WallPostAttachment): TelegramPost {
         var _media: InputMedia = {
             type: TelegramTypeMapper[attachment.type].type,
-            media: AttachmentMediaURLExtractor[attachment.type](attachment)
+            media: AttachmentMediaURLExtractor[attachment.type](attachment[attachment.type])
         }
         return {...AttachmentConstructor[_media.type](_media), caption: this.raw_post.text}
     }
