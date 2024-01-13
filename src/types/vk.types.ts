@@ -76,6 +76,7 @@ export interface PhotoAttachmentSize {
 
 export interface VideoAttachment extends IAttachment {
     id: number,
+    owner_id: number,
     title?: string,
     description?: string,
     duration: number,

@@ -2,6 +2,7 @@ import type { AudioAttachment, DocAttachment, LinkAttachment, PhotoAttachment, V
 import type { InputMedia, InputMediaPhoto, TelegramPost, InputMediaType, InputMediaVideo, InputMediaGroup, InputMediaAudio, InputMediaDocument, TelegramPostRequest, TelegramPhotoPost, TelegramVideoPost, TelegramDocumentPost, TelegramAudioPost, TelegramMessagePost, TelegramMediaGroupPost } from "types/telegram.types";
 import { SupportedAttachmentType, TelegramTypeMapper } from "units/mappings";
 import logger from "utils/logger";
+import Extractor from "vk-video-extractor"
 
 export default class PostBuilder {
     raw_post: WallPost;
@@ -13,8 +14,8 @@ export default class PostBuilder {
         this.raw_post = raw_data;
     }
 
-    public build(): TelegramPostRequest {
-        var val = this.form_attachments();
+    public async build(): Promise<TelegramPostRequest> {
+        var val = await this.form_attachments();
 
         var post_request: TelegramPostRequest = {
             method: this.method,
@@ -24,14 +25,14 @@ export default class PostBuilder {
         return post_request
     }
 
-    private form_attachments(): number {
+    private async form_attachments(): Promise<number> {
         const raw_attachments = this.raw_post.attachments.filter(el => SupportedAttachmentType.includes(el.type));
         switch (raw_attachments.length) {
             case 0:
                 return 0;
             case 1:
                 this.method = TelegramTypeMapper[raw_attachments[0].type].method;
-                this.attachment = this.attachment_from_attachment(raw_attachments[0]);
+                this.attachment = await this.attachment_from_attachment(raw_attachments[0]);
                 return raw_attachments.length;
             default:
                 // Documents and audio files can be only grouped in an album with messages of the same type
@@ -41,17 +42,22 @@ export default class PostBuilder {
                     return;
                 }
                 this.method = TelegramTypeMapper.mediaGroup;
-                this.media_group = this.form_media_group(raw_attachments);
+                this.media_group = await this.form_media_group(raw_attachments);
                 this.media_group[0].caption = this.raw_post.text;
                 return raw_attachments.length;
         }
     }
-
-    private form_media_group(attachments: WallPostAttachment[]): InputMediaGroup[] {
-        return [...attachments.map(attachment => this.media_from_attachment(attachment))];
+    // TODO: poor implementation, needs refactoring
+    private async form_media_group(attachments: WallPostAttachment[]): Promise<InputMediaGroup[]> {
+        var _media_group_promises = [...attachments.map(async (attachment) => await this.media_from_attachment(attachment))];
+        var _media_group: InputMediaGroup[] = []
+        for await (let _media of _media_group_promises) {
+            _media_group.push(_media)
+        }
+        return _media_group
     }
 
-    private media_from_attachment(attachment: WallPostAttachment): InputMediaGroup {
+    private async media_from_attachment(attachment: WallPostAttachment): Promise<InputMediaGroup> {
         var _media: InputMedia = {
             type: TelegramTypeMapper[attachment.type].type,
             media: AttachmentMediaURLExtractor[attachment.type](attachment)
@@ -59,10 +65,10 @@ export default class PostBuilder {
         return MediaConstructor[_media.type](_media)
     }
 
-    private attachment_from_attachment(attachment: WallPostAttachment): TelegramPost {
+    private async attachment_from_attachment(attachment: WallPostAttachment): Promise<TelegramPost> {
         var _media: InputMedia = {
             type: TelegramTypeMapper[attachment.type].type,
-            media: AttachmentMediaURLExtractor[attachment.type](attachment[attachment.type])
+            media: await AttachmentMediaURLExtractor[attachment.type](attachment[attachment.type])
         }
         return {...AttachmentConstructor[_media.type](_media), caption: this.raw_post.text}
     }
@@ -83,8 +89,11 @@ const AttachmentMediaURLExtractor = {
     },
     // TODO: compare video size in bytes and api limitations, fallback to sending through form-data
     // https://core.telegram.org/bots/api#sending-files
-    'video': (attachment: VideoAttachment) => {
-        return attachment.player || undefined;
+    'video': async (attachment: VideoAttachment) => {
+        // return attachment.player || undefined;
+        // handler for restricted video (property based?)
+        const res = await (new Extractor(`https://vk.com/video${attachment.owner_id}_${attachment.id}`).get_direct_url());
+        return res;
     },
     'audio': (attachment: AudioAttachment) => {
         return attachment.url || undefined;

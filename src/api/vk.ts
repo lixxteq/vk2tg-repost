@@ -64,6 +64,7 @@ export default class VkAPI {
         var filtered = res.response.items.filter((post) => post.date > (this.wall_history.history[group_id] ?? this.wall_history.init_time))
         // var filtered = res.response.items.slice(0, res.response.items.findIndex((post) => post.date < (this.wall_history.history[group_id] ?? this.wall_history.init_time)))
         if (filtered) logger.debug(`[vk] filtered get_new_posts response: ${filtered}`)
+            // TODO(critical): implement wall_history!!!
         return filtered;
     }
 }

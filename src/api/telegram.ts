@@ -28,6 +28,7 @@ export default class TelegramBotFactory {
         this.vk_api = vk_api;
         this.storage = storage.users
         this.request_mode = request_mode || 'flow';
+        // TODO: test method
         this.calculatePostTimeout().then((timeout) => this.post_timeout = timeout);
         this.$sub = this.storage.find({}).$.subscribe((data) => this.$ = data)
     }
@@ -38,7 +39,7 @@ export default class TelegramBotFactory {
      */
     async init() {
         this.$ = await this.storage.find({}).exec()
-        logger.info(`[telegram] started bot, RxDB entries: ${this.$?.length}`)
+        logger.info(`[telegram] started bot, RxDB entries: ${this.$?.length}, request timeout: ${this.post_timeout}`)
         this.poll();
         this.initPostLoop();
     }
@@ -196,7 +197,7 @@ export default class TelegramBotFactory {
             if (raw_posts.length) {
                 for (const raw_post of raw_posts) {
                     logger.debug(`raw_post: %O`, [raw_post])
-                    const post_request = new PostBuilder(raw_post).build();
+                    const post_request = await new PostBuilder(raw_post).build();
                     logger.debug(`post: %O`, [post_request, post_request.data])
                     this.post(post_request, consumer_ids)
                 }
@@ -219,10 +220,9 @@ export default class TelegramBotFactory {
      * @returns timeout in milliseconds
      */
     async calculatePostTimeout() {
-        return this.request_mode === 'burst' ? 86400 / (5000 / await this.storage.count({}).exec()) * 1000 : 86400 / 5000 * 1000;
+        return Number(process.env.DEBUG_REQUEST_COOLDOWN) || (this.request_mode === 'burst' ? 86400 / (5000 / await this.storage.count({}).exec()) * 1000 : 86400 / 5000 * 1000);
     }
 }
-
 
 const isCommand = (message: string) => {
     // message is considered as command only if it is in Commands list or if it's Unicode emoji
