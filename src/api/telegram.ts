@@ -5,7 +5,7 @@ import PostBuilder from "./post-builder";
 import Symbols from "units/symbols";
 import Texts from "units/texts";
 import Commands from "units/commands";
-import { serializeToQuery } from "utils/utils";
+import { PostFormData, serializeToQuery } from "utils/utils";
 import type { Subscription } from "rxjs";
 import logger from "utils/logger";
 import type { UserCollection, UserDatabase, UserDocument } from "storage/db";
@@ -38,9 +38,9 @@ export default class TelegramBotFactory {
      */
     async init() {
         this.$ = await this.storage.find({}).exec()
+        logger.info(`[telegram] started bot, RxDB entries: ${this.$?.length}`)
         this.poll();
         this.initPostLoop();
-        logger.info(`[telegram] started bot, RxDB entries: ${this.$?.length}`)
     }
 
     async poll() {
@@ -132,21 +132,19 @@ export default class TelegramBotFactory {
         // screen name resolver
         for (let id of ids) {
             var _doc = await this.storage.findOne({selector: {group_id: id}}).exec()
-            // this.storage.insert({group_id: id, consumer_id: message.chat.id})
             if (_doc) _doc.consumer_ids.push(message.chat.id)
             if (!_doc) _doc = await this.storage.insert({group_id: id, consumer_ids: [message.chat.id]})
-            // this.storage.commit()
-            // this.storage.updateWhere((data) => data.group_id === id, (obj) => obj.consumer_ids.push(message.chat.id))
         }
-        logger.info(`[telegram]: subscribe ${message.chat.id} to ${ids.join(', ')}`)
+        logger.debug(`[telegram]: subscribe ${message.chat.id} to ${ids.join(', ')}`)
     }
 
     async unsubscribe(message: IncomingMessage) {
-
+        // TODO: validation + error throwing
+        
     }
 
-    async send_subscriptions_list(chat_id: number) {
-        this.sendMessage({chat_id: chat_id, text: `${Texts.LIST} ${this.storage.find({selector: {consumer_ids: {$in: [chat_id]}}})}`})
+    async send_subscriptions_list(chat_id: number, text: string = Texts.LIST) {
+        this.sendMessage({chat_id: chat_id, text: `${Texts.LIST} ${await this.storage.find({selector: {consumer_ids: {$in: [chat_id]}}}).exec()}`})
     }
 
     async sendMessage(message: OutgoingMessage) {
@@ -166,10 +164,9 @@ export default class TelegramBotFactory {
             req_stack.push(
                 fetch(`${this.request_uri}${req.method}`, {
                     method: 'POST',
-                    // headers: {
-                    //     'Content-Type': 'multipart/form-data'
-                    // },
-                    body: JSON.stringify(req.data)
+                    body: new PostFormData(req.data)
+                }).then(async (res) => {
+                    logger.debug(`[telegram] submit data: ${JSON.stringify(req.data)}, post response: ${res.status}, ${res.body.read()}`)
                 })
             )
         }
@@ -187,7 +184,7 @@ export default class TelegramBotFactory {
     }
 
     async flowPostLoop(idx: number) {
-        logger.info(`[telegram] loop call ${idx}, RxDB entries: ${await this.storage.count({}).exec()}, RxObservable count: ${this.$.length}`)
+        logger.info(`[telegram] loop call ${idx}, RxDB entries: ${this.$.length}`)
         if (await this.storage.count({}).exec() === 0) return setTimeout(() => { this.flowPostLoop(0) }, 60 * 1000);
         if (idx >= this.$.length) idx = 0;
         const { group_id, consumer_ids } = this.$[idx]
@@ -198,7 +195,9 @@ export default class TelegramBotFactory {
             const raw_posts = await this.vk_api.getNewPosts(group_id);
             if (raw_posts.length) {
                 for (const raw_post of raw_posts) {
+                    logger.debug(`raw_post: %O`, [raw_post])
                     const post_request = new PostBuilder(raw_post).build();
+                    logger.debug(`post: %O`, [post_request, post_request.data])
                     this.post(post_request, consumer_ids)
                 }
             }

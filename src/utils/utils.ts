@@ -6,4 +6,13 @@ const serializeToQuery = (data: object) => {
     return query;
 }
 
-export {serializeToQuery};
+class PostFormData extends FormData {
+    constructor(obj: object) {
+        super();
+        Object.entries(obj).forEach(([key, value]) => {
+            this.append(key, value);
+        })
+    }
+}
+
+export {serializeToQuery, PostFormData};

@@ -34,7 +34,7 @@ export default class VkAPI {
 
     constructor() {
         this.ref = new APIReference();
-        this.wall_history = {init_time: Date.now() / 1000, history: {}};
+        this.wall_history = {init_time: (Date.now() / 1000) - 1000, history: {}};
     }
 
     async getDomainById(id: number | string[]) {
@@ -60,7 +60,9 @@ export default class VkAPI {
         if (res.response.items[0].is_pinned === 1) res.response.items.shift()
         if (res.error && [15, 19].includes(res.error.error_code)) throw new Error(`Сообщество "${await this.getDomainById(group_id)}" закрыло доступ к своим записям. Уберите это сообщество из отслеживаемых`);
         if (res.error) throw new Error(`Ошибка запроса: ${res.error.error_code}`);
-        var filtered = res.response.items.slice(0, res.response.items.findIndex((post) => post.date < (this.wall_history.history[group_id] ?? this.wall_history.init_time)))
+        logger.debug(`init time: ${this.wall_history.init_time}, last post time: ${res.response.items[0].date}`)
+        var filtered = res.response.items.filter((post) => post.date > (this.wall_history.history[group_id] ?? this.wall_history.init_time))
+        // var filtered = res.response.items.slice(0, res.response.items.findIndex((post) => post.date < (this.wall_history.history[group_id] ?? this.wall_history.init_time)))
         if (filtered) logger.debug(`[vk] filtered get_new_posts response: ${filtered}`)
         return filtered;
     }

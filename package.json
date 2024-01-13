@@ -2,14 +2,15 @@
   "name": "vk2tg-repost",
   "version": "1.0.0",
   "description": "Simple NodeJS application for reposting VK communities posts to Telegram chat/bot conversation",
-  "main": "./src/main.js",
+  "main": "./dist/main.js",
   "author": "lixxteq (Zhakov Roman) <https://github.com/lixxteq>",
   "license": "MIT",
   "private": false,
   "scripts": {
     "dev": "yarn build --watch=forever & yarn nodemon dist/main.js",
     "start": "node dist/main.js",
-    "build": "yarn esbuild --bundle src/main.ts --outdir=dist --platform=node"
+    "build": "yarn esbuild --bundle src/main.ts --outdir=dist --platform=node",
+    "start:mongo": "sudo systemctl start docker && docker-compose up &"
   },
   "dependencies": {
     "node-fetch": "^3.3.2",

@@ -93,7 +93,12 @@ export interface AudioAttachment extends IAttachment {
 }
 
 export interface DocAttachment extends IAttachment {
-    
+    id: number,
+    title?: string,
+    size: number,
+    ext: string,
+    url?: string,
+    [key: string]: any
 }
 
 type AttachmentType = "photo" | "photos_list" | "audio" | "audio_playlist" | "video" | "doc" | "link" | "note" | "app" | "poll" | "page" | "album" | "event" | "article" | "group";

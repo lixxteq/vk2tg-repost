@@ -1,6 +1,7 @@
-import type { AudioAttachment, LinkAttachment, PhotoAttachment, VideoAttachment, WallPost, WallPostAttachment } from "types/vk.types";
+import type { AudioAttachment, DocAttachment, LinkAttachment, PhotoAttachment, VideoAttachment, WallPost, WallPostAttachment } from "types/vk.types";
 import type { InputMedia, InputMediaPhoto, TelegramPost, InputMediaType, InputMediaVideo, InputMediaGroup, InputMediaAudio, InputMediaDocument, TelegramPostRequest, TelegramPhotoPost, TelegramVideoPost, TelegramDocumentPost, TelegramAudioPost, TelegramMessagePost, TelegramMediaGroupPost } from "types/telegram.types";
 import { SupportedAttachmentType, TelegramTypeMapper } from "units/mappings";
+import logger from "utils/logger";
 
 export default class PostBuilder {
     raw_post: WallPost;
@@ -74,26 +75,30 @@ const AttachmentMediaURLExtractor = {
     // TODO: compare photo size in bytes and api limitations, fallback to sending through form-data
     // https://core.telegram.org/bots/api#sending-files
     'photo': (attachment: PhotoAttachment) => {
-        return attachment.sizes.filter(el => el.type === 'z')[0].url;
+        logger.debug(`attachment: %O`, [attachment, attachment.sizes])
+        return attachment.sizes.filter(el => el.type === 'z' || el.type === 'y')[0].url;
     },
     'link': (attachment: LinkAttachment) => {
-        return attachment.url;
+        return attachment.url || undefined;
     },
     // TODO: compare video size in bytes and api limitations, fallback to sending through form-data
     // https://core.telegram.org/bots/api#sending-files
     'video': (attachment: VideoAttachment) => {
-        return attachment.player;
+        return attachment.player || undefined;
     },
     'audio': (attachment: AudioAttachment) => {
-        return attachment.url;
+        return attachment.url || undefined;
+    },
+    'doc': (attachment: DocAttachment) => {
+        return attachment.url || undefined;
     }
 }
 
 const MediaConstructor = {
-    'photo': (media: InputMedia): InputMediaPhoto => ({...media, type: 'photo', show_caption_above_media: true}),
-    'video': (media: InputMedia): InputMediaVideo => ({...media, type: 'video', show_caption_above_media: true}),
-    'audio': (media: InputMedia): InputMediaAudio => ({...media, type: 'audio'}),
-    'document': (media: InputMedia): InputMediaDocument => ({...media, type: 'document'})
+    'photo': (_media: InputMedia): InputMediaPhoto => ({..._media, type: 'photo', show_caption_above_media: true}),
+    'video': (_media: InputMedia): InputMediaVideo => ({..._media, type: 'video', show_caption_above_media: true}),
+    'audio': (_media: InputMedia): InputMediaAudio => ({..._media, type: 'audio'}),
+    'document': (_media: InputMedia): InputMediaDocument => ({..._media, type: 'document'})
 }
 
 const AttachmentConstructor = {
